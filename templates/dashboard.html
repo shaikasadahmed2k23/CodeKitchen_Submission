@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>24/7 Code Reviewer — Dashboard</title>
+<style>
+  body { background:#0b0b0b; color:#e8e8e8; font-family: -apple-system, Segoe UI, Roboto, sans-serif; padding:2rem; }
+  h1 { font-weight:600; }
+  table { width:100%; border-collapse:collapse; margin-top:1rem; }
+  th, td { text-align:left; padding:0.6rem 0.8rem; border-bottom:1px solid #222; font-size:0.9rem; }
+  th { color:#8a8a8a; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.04em; }
+  .score { font-weight:700; }
+  .score-high { color:#3ddc84; }
+  .score-mid  { color:#e8b93d; }
+  .score-low  { color:#e85d5d; }
+  .repo { color:#8a8a8a; font-size:0.8rem; }
+</style>
+</head>
+<body>
+  <h1>🤖 24/7 Intelligent Code Reviewer</h1>
+  <p class="repo">Most recent {{ reviews|length }} reviews across all connected repos.</p>
+  <table>
+    <tr><th>Repo</th><th>PR</th><th>Author</th><th>Score</th><th>Files</th><th>Reviewed At</th></tr>
+    {% for r in reviews %}
+    <tr>
+      <td>{{ r.repo }}</td>
+      <td>#{{ r.pr_number }}</td>
+      <td>{{ r.author }}</td>
+      <td class="score {{ 'score-high' if r.quality_score >= 80 else ('score-mid' if r.quality_score >= 50 else 'score-low') }}">
+        {{ r.quality_score }}
+      </td>
+      <td>{{ r.files_reviewed }}</td>
+      <td>{{ r.reviewed_at }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">No reviews yet.</td></tr>
+    {% endfor %}
+  </table>
+</body>
+</html>
