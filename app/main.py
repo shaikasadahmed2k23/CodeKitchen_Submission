@@ -36,8 +36,11 @@ else:
     logger.warning("GEMINI_API_KEY not set; reviews will fail until it is configured.")
 
 
-async def _run_review(job: ReviewJob) -> None:
-    """The actual review pipeline. Runs off the request thread via the queue."""
+async def _run_review(job: ReviewJob) -> dict:
+    """The actual review pipeline. Runs off the request thread via the queue.
+    Returns a status dict describing what actually happened, rather than
+    swallowing errors -- callers (webhook queue, /internal/run-review, tests)
+    need to know if the review genuinely succeeded."""
     repo, pr_number, author = job["repo"], job["pr_number"], job["author"]
     try:
         diff = await github.fetch_pr_diff(repo, pr_number)
@@ -49,7 +52,7 @@ async def _run_review(job: ReviewJob) -> None:
         cleaned_diff, was_truncated = truncate(cleaned_diff, settings.max_diff_chars)
 
         if _reviewer is None:
-            raise RuntimeError("Gemini reviewer not configured")
+            raise RuntimeError("Gemini reviewer not configured -- set GEMINI_API_KEY")
 
         result = _reviewer.review(repo=repo, pr_number=pr_number, author=author,
                                    diff_text=cleaned_diff, files=files)
@@ -57,10 +60,22 @@ async def _run_review(job: ReviewJob) -> None:
             result.summary += " (Note: diff exceeded size limit and was truncated for review.)"
 
         await store.save(result)
-        await github.post_pr_comment(repo, pr_number, result.to_pr_comment_markdown())
+
+        comment_posted = True
+        try:
+            await github.post_pr_comment(repo, pr_number, result.to_pr_comment_markdown())
+        except Exception as exc:
+            # Common in local testing: token lacks write access to a repo you don't own.
+            # The review itself still succeeded and was saved -- don't mask that.
+            comment_posted = False
+            logger.warning("Review succeeded but posting the PR comment failed (%s#%s): %s", repo, pr_number, exc)
+
         logger.info("Reviewed %s#%s -> score %d", repo, pr_number, result.quality_score)
-    except Exception:
+        return {"status": "success", "quality_score": result.quality_score,
+                "comment_posted": comment_posted, "repo": repo, "pr_number": pr_number}
+    except Exception as exc:
         logger.exception("Review pipeline failed for %s#%s", repo, pr_number)
+        return {"status": "error", "error": str(exc), "repo": repo, "pr_number": pr_number}
 
 
 queue = (
@@ -105,10 +120,14 @@ async def github_webhook(request: Request):
 @app.post("/internal/run-review")
 async def internal_run_review(request: Request):
     """Target endpoint Cloud Tasks calls back into (OIDC-authenticated at the
-    Cloud Run/IAM layer -- not re-verified here)."""
+    Cloud Run/IAM layer -- not re-verified here). Also handy for manual
+    testing: POST a job here directly and get back the real outcome, not
+    just an ack that the request was received."""
     job = await request.json()
-    await _run_review(job)
-    return {"status": "done"}
+    outcome = await _run_review(job)
+    if outcome["status"] == "error":
+        raise HTTPException(status_code=500, detail=outcome)
+    return outcome
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
