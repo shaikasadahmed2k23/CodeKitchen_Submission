@@ -10,6 +10,7 @@ from app.gemini_reviewer import GeminiReviewer
 from app.queue import InProcessQueue, CloudTasksQueue, ReviewJob
 from app.security import redact, truncate
 from app.store import FirestoreReviewStore, InMemoryReviewStore, ReviewStore
+from app.trust import apply_trust_adjustment
 from app.webhook_handler import InvalidSignatureError, parse_pull_request_event, verify_signature
 
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +60,18 @@ async def _run_review(job: ReviewJob) -> dict:
         if was_truncated:
             result.summary += " (Note: diff exceeded size limit and was truncated for review.)"
 
+        # Historical learning: pull this developer's track record in this repo
+        # BEFORE saving the current review, so it only reflects past PRs, then
+        # let it nudge (never override) the score Gemini just gave this diff.
+        trend = await store.trend_for_developer(repo, author)
+        adjusted_score, trust_level, adjustment = apply_trust_adjustment(
+            raw_score=result.quality_score, comments=result.comments, trend=trend
+        )
+        result.raw_score = result.quality_score
+        result.quality_score = adjusted_score
+        result.trust_level = trust_level
+        result.trust_adjustment = adjustment
+
         await store.save(result)
 
         comment_posted = True
@@ -70,8 +83,10 @@ async def _run_review(job: ReviewJob) -> dict:
             comment_posted = False
             logger.warning("Review succeeded but posting the PR comment failed (%s#%s): %s", repo, pr_number, exc)
 
-        logger.info("Reviewed %s#%s -> score %d", repo, pr_number, result.quality_score)
-        return {"status": "success", "quality_score": result.quality_score,
+        logger.info("Reviewed %s#%s -> score %d (raw %d, trust %s, adj %+d)",
+                     repo, pr_number, result.quality_score, result.raw_score, trust_level, adjustment)
+        return {"status": "success", "quality_score": result.quality_score, "raw_score": result.raw_score,
+                "trust_level": trust_level, "trust_adjustment": adjustment,
                 "comment_posted": comment_posted, "repo": repo, "pr_number": pr_number}
     except Exception as exc:
         logger.exception("Review pipeline failed for %s#%s", repo, pr_number)

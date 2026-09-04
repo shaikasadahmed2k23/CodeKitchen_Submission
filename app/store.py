@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 
 from app.models import DeveloperTrend, ReviewResult
+from app.trust import classify_trust_level
 
 
 class ReviewStore(ABC):
@@ -52,8 +53,10 @@ class InMemoryReviewStore(ReviewStore):
         results = [r for _, r in pairs]
         avg = sum(r.quality_score for r in results) / len(results)
         last = max(r.reviewed_at for r in results)
-        return DeveloperTrend(developer=developer, repo=repo, review_count=len(results),
-                               average_score=round(avg, 1), last_reviewed_at=last)
+        trend = DeveloperTrend(developer=developer, repo=repo, review_count=len(results),
+                                average_score=round(avg, 1), last_reviewed_at=last)
+        trend.trust_level = classify_trust_level(trend)
+        return trend
 
     async def all_recent(self, limit: int = 50) -> list[ReviewResult]:
         ordered = sorted(self._all, key=lambda pair: (pair[1].reviewed_at, pair[0]), reverse=True)
@@ -89,8 +92,10 @@ class FirestoreReviewStore(ReviewStore):
         if not items:
             return DeveloperTrend(developer=developer, repo=repo, review_count=0, average_score=0.0)
         avg = sum(r.quality_score for r in items) / len(items)
-        return DeveloperTrend(developer=developer, repo=repo, review_count=len(items),
-                               average_score=round(avg, 1), last_reviewed_at=items[0].reviewed_at)
+        trend = DeveloperTrend(developer=developer, repo=repo, review_count=len(items),
+                                average_score=round(avg, 1), last_reviewed_at=items[0].reviewed_at)
+        trend.trust_level = classify_trust_level(trend)
+        return trend
 
     async def all_recent(self, limit: int = 50) -> list[ReviewResult]:
         query = self._db.collection(self._collection).order_by("reviewed_at", direction="DESCENDING").limit(limit)

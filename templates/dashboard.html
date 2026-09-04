@@ -14,26 +14,32 @@
   .score-mid  { color:#e8b93d; }
   .score-low  { color:#e85d5d; }
   .repo { color:#8a8a8a; font-size:0.8rem; }
+  .pill { display:inline-block; padding:0.15rem 0.6rem; border-radius:999px; font-size:0.72rem; font-weight:600; text-transform:capitalize; }
+  .pill-new       { background:#2a2a2a; color:#b0b0b0; }
+  .pill-building  { background:#2a2a2a; color:#b0b0b0; }
+  .pill-trusted   { background:#123a24; color:#3ddc84; }
+  .pill-needs_scrutiny { background:#3a1414; color:#e85d5d; }
 </style>
 </head>
 <body>
   <h1>🤖 24/7 Intelligent Code Reviewer</h1>
   <p class="repo">Most recent {{ reviews|length }} reviews across all connected repos.</p>
   <table>
-    <tr><th>Repo</th><th>PR</th><th>Author</th><th>Score</th><th>Files</th><th>Reviewed At</th></tr>
+    <tr><th>Repo</th><th>PR</th><th>Author</th><th>Trust</th><th>Score</th><th>Files</th><th>Reviewed At</th></tr>
     {% for r in reviews %}
     <tr>
       <td>{{ r.repo }}</td>
       <td>#{{ r.pr_number }}</td>
       <td>{{ r.author }}</td>
+      <td><span class="pill pill-{{ r.trust_level }}">{{ r.trust_level.replace('_', ' ') }}</span></td>
       <td class="score {{ 'score-high' if r.quality_score >= 80 else ('score-mid' if r.quality_score >= 50 else 'score-low') }}">
-        {{ r.quality_score }}
+        {{ r.quality_score }}{% if r.trust_adjustment != 0 %}<span style="font-size:0.7rem; color:#8a8a8a;"> ({{ r.raw_score }}{{ '%+d'|format(r.trust_adjustment) }})</span>{% endif %}
       </td>
       <td>{{ r.files_reviewed }}</td>
       <td>{{ r.reviewed_at }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6">No reviews yet.</td></tr>
+    <tr><td colspan="7">No reviews yet.</td></tr>
     {% endfor %}
   </table>
 </body>

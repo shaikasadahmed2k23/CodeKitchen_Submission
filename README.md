@@ -5,7 +5,8 @@
 An always-on code reviewer for teams without a senior reviewer available
 round the clock. Opens/updates on a PR trigger an automated multi-language
 review (bugs, security, performance, style, maintainability), a 0–100
-quality score, and a running per-developer history — all built on GCP.
+quality score, **and a developer trust profile that learns from review
+history** — all built on GCP.
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full data flow and the
 reasoning behind each GCP product choice.
@@ -37,9 +38,10 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-24 tests covering: webhook signature verification, PR event parsing,
+35 tests covering: webhook signature verification, PR event parsing,
 secret/PII redaction, diff truncation, the Gemini JSON-response parser
-(mocked), the GitHub API client (mocked httpx), and the review store.
+(mocked), the GitHub API client (mocked httpx), the review store, and the
+developer trust profile / historical-learning adjustment rules.
 
 ## Deploying to GCP
 
@@ -69,8 +71,9 @@ app/
   gemini_reviewer.py  Gemini prompt + structured JSON review parsing
   security.py         Secret/PII redaction + diff truncation
   store.py            Firestore store (prod) / in-memory store (local, tests)
+  trust.py            Developer trust profile -- historical learning, bounded score adjustment
   queue.py            Cloud Tasks queue (prod) / in-process queue (local)
 templates/dashboard.html
-tests/                24 unit tests, all mocked -- no live GCP/GitHub/Gemini calls needed
+tests/                35 unit tests, all mocked -- no live GCP/GitHub/Gemini calls needed
 Dockerfile, cloudbuild.yaml, scripts/setup_gcp.sh
 ```

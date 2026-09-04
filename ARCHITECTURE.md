@@ -23,14 +23,48 @@ Review pipeline:
   3. Truncate diff to MAX_DIFF_CHARS if it exceeds the review size limit
   4. Send to Gemini 3.5 Flash with a system prompt requiring strict JSON output
      (quality_score, summary, per-file/line comments with severity+category)
-  5. Persist ReviewResult to Firestore (review_history collection)
-  6. Post the formatted review as a PR comment via GitHub REST API
+  5. **Historical learning**: pull the developer's past review history for this
+     repo (Firestore query on repo+author, BEFORE saving the current review),
+     classify a trust level, and nudge the raw score by a bounded amount
+     (see "Historical learning" below) -- so returning contributors' track
+     record actually informs the next review, not just gets logged
+  6. Persist the final ReviewResult (raw score, trust level, adjustment, and
+     final score all recorded separately) to Firestore (review_history collection)
+  7. Post the formatted review as a PR comment via GitHub REST API, including
+     the trust context so the adjustment is never a silent black box
         │
         ▼
 GET /dashboard renders recent reviews + per-developer trend from Firestore
 ```
 
-## Why each GCP product
+## Historical learning (developer trust profile)
+
+`app/trust.py` is the "learns over time" half of the brief -- history isn't
+just stored, it changes how the next review is scored, within a
+deliberately bounded, explainable range:
+
+| Trust level | Criteria | Effect on new score |
+|---|---|---|
+| `new` | no prior reviews in this repo | none |
+| `building` | fewer than 5 reviews, or mixed results | none -- not enough signal yet |
+| `trusted` | 5+ reviews, 80+ average score | **+5**, unless this PR has a critical finding |
+| `needs_scrutiny` | 3+ reviews, average score under 50 | **−5**, surfaces the pattern even if this diff looks fine alone |
+
+Two rules keep this from becoming a way to game the system:
+
+1. **A critical-severity finding in the current diff always blocks the
+   positive adjustment.** A spotless history buys benefit of the doubt on
+   borderline style/quality calls -- never on a fresh security or
+   correctness issue.
+2. **The adjustment is capped at ±5 and clamped to [0, 100].** It nudges;
+   it never flips a genuinely bad review into a passing one or vice versa.
+
+Every `ReviewResult` stores `raw_score` (what Gemini gave this diff alone),
+`trust_level`, `trust_adjustment`, and the final `quality_score` separately
+-- so the adjustment is always traceable in the PR comment and the
+dashboard, never a silent black box.
+
+
 
 - **Cloud Run** — the webhook receiver and review worker are the same
   stateless FastAPI service, scales to zero between PRs, scales out under
