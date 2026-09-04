@@ -30,29 +30,34 @@ class InMemoryReviewStore(ReviewStore):
     """Used for local `uvicorn` runs without GCP creds, and in unit tests."""
 
     def __init__(self):
-        self._by_dev: dict[tuple[str, str], list[ReviewResult]] = defaultdict(list)
-        self._all: list[ReviewResult] = []
+        self._by_dev: dict[tuple[str, str], list[tuple[int, ReviewResult]]] = defaultdict(list)
+        self._all: list[tuple[int, ReviewResult]] = []
+        self._seq = 0  # tie-breaker: some platforms' clock resolution can tie two saves
 
     async def save(self, result: ReviewResult) -> None:
+        self._seq += 1
         key = (result.repo, result.author)
-        self._by_dev[key].append(result)
-        self._all.append(result)
+        self._by_dev[key].append((self._seq, result))
+        self._all.append((self._seq, result))
 
     async def history_for_developer(self, repo: str, developer: str, limit: int = 20) -> list[ReviewResult]:
         items = self._by_dev.get((repo, developer), [])
-        return sorted(items, key=lambda r: r.reviewed_at, reverse=True)[:limit]
+        ordered = sorted(items, key=lambda pair: (pair[1].reviewed_at, pair[0]), reverse=True)
+        return [r for _, r in ordered[:limit]]
 
     async def trend_for_developer(self, repo: str, developer: str) -> DeveloperTrend:
-        items = self._by_dev.get((repo, developer), [])
-        if not items:
+        pairs = self._by_dev.get((repo, developer), [])
+        if not pairs:
             return DeveloperTrend(developer=developer, repo=repo, review_count=0, average_score=0.0)
-        avg = sum(r.quality_score for r in items) / len(items)
-        last = max(r.reviewed_at for r in items)
-        return DeveloperTrend(developer=developer, repo=repo, review_count=len(items),
+        results = [r for _, r in pairs]
+        avg = sum(r.quality_score for r in results) / len(results)
+        last = max(r.reviewed_at for r in results)
+        return DeveloperTrend(developer=developer, repo=repo, review_count=len(results),
                                average_score=round(avg, 1), last_reviewed_at=last)
 
     async def all_recent(self, limit: int = 50) -> list[ReviewResult]:
-        return sorted(self._all, key=lambda r: r.reviewed_at, reverse=True)[:limit]
+        ordered = sorted(self._all, key=lambda pair: (pair[1].reviewed_at, pair[0]), reverse=True)
+        return [r for _, r in ordered[:limit]]
 
 
 class FirestoreReviewStore(ReviewStore):
