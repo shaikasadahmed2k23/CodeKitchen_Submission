@@ -30,7 +30,7 @@ never generic advice."""
 
 
 class GeminiReviewer:
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro"):
+    def __init__(self, api_key: str, model_name: str = "gemini-3.5-flash"):
         genai.configure(api_key=api_key)
         self._model = genai.GenerativeModel(
             model_name=model_name,

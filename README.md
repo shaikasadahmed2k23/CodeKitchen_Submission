@@ -12,7 +12,7 @@ reasoning behind each GCP product choice.
 
 ## Stack
 
-FastAPI · Gemini 1.5 Pro · Firestore · Cloud Tasks · Cloud Run · Cloud Build · Secret Manager
+FastAPI · Gemini 3.5 Flash · Firestore · Cloud Tasks · Cloud Run · Cloud Build · Secret Manager
 
 ## Local development
 

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # --- Gemini / Vertex AI ---
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-1.5-pro"
+    gemini_model: str = "gemini-3.5-flash"
 
     # --- GCP project / infra ---
     gcp_project_id: str = "code-kitchen-reviewer"

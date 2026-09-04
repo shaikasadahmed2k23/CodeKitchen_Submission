@@ -21,7 +21,7 @@ Review pipeline:
   2. Redact likely secrets/PII from the diff (app/security.py) BEFORE it
      ever reaches Gemini -- API keys, AWS keys, private key blocks, emails, JWTs
   3. Truncate diff to MAX_DIFF_CHARS if it exceeds the review size limit
-  4. Send to Gemini 1.5 Pro with a system prompt requiring strict JSON output
+  4. Send to Gemini 3.5 Flash with a system prompt requiring strict JSON output
      (quality_score, summary, per-file/line comments with severity+category)
   5. Persist ReviewResult to Firestore (review_history collection)
   6. Post the formatted review as a PR comment via GitHub REST API
@@ -35,7 +35,7 @@ GET /dashboard renders recent reviews + per-developer trend from Firestore
 - **Cloud Run** — the webhook receiver and review worker are the same
   stateless FastAPI service, scales to zero between PRs, scales out under
   burst load (e.g. a mass rebase across a monorepo).
-- **Gemini 1.5 Pro (Vertex AI / Generative AI SDK)** — multi-language
+- **Gemini 3.5 Flash (Vertex AI / Generative AI SDK)** — multi-language
   understanding for the actual review reasoning; large context window
   handles realistic diff sizes.
 - **Firestore** — review history is sparse, per-document, per-developer/
